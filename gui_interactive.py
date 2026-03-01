@@ -50,9 +50,9 @@ def run_gui(default_a: float = 0.85, default_c: float = 12.0, frenet_spacing: fl
                     T, N, B = c1_curve.frenet_frame(tt, c_val)
                     pos = np.array(c1_curve.evaluate(tt, c_val))
                     scale = 0.25
-                    qT = ax3d.quiver(*pos, *T, color='red', length=scale, arrow_length_ratio=0.25)
-                    qN = ax3d.quiver(*pos, *N, color='lime', length=scale, arrow_length_ratio=0.25)
-                    qB = ax3d.quiver(*pos, *B, color='cyan', length=scale, arrow_length_ratio=0.25)
+                    qT = ax3d.quiver(*pos, *T, length=int(scale), arrow_length_ratio=0.25)
+                    qN = ax3d.quiver(*pos, *N, length=int(scale), arrow_length_ratio=0.25)
+                    qB = ax3d.quiver(*pos, *B, length=int(scale), arrow_length_ratio=0.25)
                     frenet_artists.extend([qT, qN, qB])
             if show_c2:
                 for tt in ts_frames:
@@ -114,16 +114,16 @@ def run_gui(default_a: float = 0.85, default_c: float = 12.0, frenet_spacing: fl
         fig.canvas.draw_idle()
 
     # Widgets
-    ax_a = plt.axes([0.15, 0.22, 0.65, 0.03])
+    ax_a = plt.axes((0.15, 0.22, 0.65, 0.03))
     slider_a = Slider(ax_a, 'a (green distance)', 0.20, 2.50, valinit=default_a, valstep=0.001)
 
-    ax_c = plt.axes([0.15, 0.18, 0.65, 0.03])
+    ax_c = plt.axes((0.15, 0.18, 0.65, 0.03))
     slider_c = Slider(ax_c, 'c (z-rise per loop)', -20, 20, valinit=default_c, valstep=0.1)
 
-    ax_spacing = plt.axes([0.15, 0.14, 0.65, 0.03])
+    ax_spacing = plt.axes((0.15, 0.14, 0.65, 0.03))
     slider_spacing = Slider(ax_spacing, 'Frenet frame spacing (units)', 0.1, 2.0, valinit=frenet_spacing, valstep=0.05)
 
-    ax_check = plt.axes([0.82, 0.75, 0.16, 0.15])
+    ax_check = plt.axes((0.82, 0.75, 0.16, 0.15))
     check = CheckButtons(ax_check, ['Show C¹ Path', 'Show C² Clothoid', 'Show Frenet Frames'], [True, True, True])
 
     def on_change(_):
