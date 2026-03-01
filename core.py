@@ -35,7 +35,40 @@ class Figure8Curve:
             'cum_L': cum_L, 'total_L': total_L
         }
 
-    def evaluate(self, t: Union[float, np.ndarray], c_z: Optional[float] = 4.0) -> Tuple:
+    def _eval_left_upper_arc(self, s: np.ndarray, info: Dict) -> Tuple[np.ndarray, np.ndarray]:
+        """Evaluate left upper circular arc segment"""
+        theta = np.pi - (np.pi - info['theta_lu']) * s
+        x = -info['c'] + self.r * np.cos(theta)
+        y = self.r * np.sin(theta)
+        return x, y
+
+    def _eval_x1_straight(self, s: np.ndarray, info: Dict) -> Tuple[np.ndarray, np.ndarray]:
+        """Evaluate left inner straight segment"""
+        x = -self.a + 2*self.a * s
+        y = info['yj'] - 2*info['yj'] * s
+        return x, y
+
+    def _eval_right_arc(self, s: np.ndarray, info: Dict) -> Tuple[np.ndarray, np.ndarray]:
+        """Evaluate right circular arc segment"""
+        theta = info['theta_rl'] + (info['theta_ru'] - info['theta_rl']) * s
+        x = info['c'] + self.r * np.cos(theta)
+        y = self.r * np.sin(theta)
+        return x, y
+
+    def _eval_x2_straight(self, s: np.ndarray, info: Dict) -> Tuple[np.ndarray, np.ndarray]:
+        """Evaluate right inner straight segment"""
+        x = self.a - 2*self.a * s
+        y = info['yj'] - 2*info['yj'] * s
+        return x, y
+
+    def _eval_left_lower_arc(self, s: np.ndarray, info: Dict) -> Tuple[np.ndarray, np.ndarray]:
+        """Evaluate left lower circular arc segment"""
+        theta = info['theta_ll'] - (info['theta_ll'] + np.pi) * s
+        x = -info['c'] + self.r * np.cos(theta)
+        y = self.r * np.sin(theta)
+        return x, y
+
+    def evaluate(self, t: Union[float, np.ndarray], c_z: Optional[float] = None) -> Tuple:
         t = np.asarray(t)
         info = self.info
         cum = info['cum_L']
@@ -49,35 +82,29 @@ class Figure8Curve:
         seg = np.searchsorted(cum, s_global, side='right') - 1
         seg = np.clip(seg, 0, 4)
 
-        for i in range(5):
+        # Process each segment type with dedicated evaluation methods
+        segment_functions = [
+            self._eval_left_upper_arc,
+            self._eval_x1_straight,
+            self._eval_right_arc,
+            self._eval_x2_straight,
+            self._eval_left_lower_arc
+        ]
+        
+        for i, func in enumerate(segment_functions):
             mask = (seg == i)
-            if not np.any(mask): continue
+            if not np.any(mask): 
+                continue
             s = (s_global[mask] - cum[i]) / (cum[i+1] - cum[i])
-
-            if i == 0:   # Left upper arc
-                theta = np.pi - (np.pi - info['theta_lu']) * s
-                x[mask] = -info['c'] + self.r * np.cos(theta)
-                y[mask] = self.r * np.sin(theta)
-            elif i == 1: # X1 straight
-                x[mask] = -self.a + 2*self.a * s
-                y[mask] = info['yj'] - 2*info['yj'] * s
-            elif i == 2: # Right arc
-                theta = info['theta_rl'] + (info['theta_ru'] - info['theta_rl']) * s
-                x[mask] = info['c'] + self.r * np.cos(theta)
-                y[mask] = self.r * np.sin(theta)
-            elif i == 3: # X2 straight
-                x[mask] = self.a - 2*self.a * s
-                y[mask] = info['yj'] - 2*info['yj'] * s
-            else:        # Left lower arc
-                theta = info['theta_ll'] - (info['theta_ll'] + np.pi) * s
-                x[mask] = -info['c'] + self.r * np.cos(theta)
-                y[mask] = self.r * np.sin(theta)
+            x_mask, y_mask = func(s, info)
+            x[mask] = x_mask
+            y[mask] = y_mask
 
         if z is None:
             return x, y
         return x, y, z
 
-    def get_dense_points(self, n: int = 10000, c_z: Optional[float] = 4.0):
+    def get_dense_points(self, n: int = 10000, c_z: Optional[float] = None):
         t = np.linspace(0, 1, n)
         return self.evaluate(t, c_z)
 
@@ -89,7 +116,12 @@ class Figure8Curve:
 
     def get_junction_points(self) -> Dict:
         ts = np.array([0.0, self.info['cum_L'][1]/self.info['total_L'], 0.5, 1.0])
-        x, y, _ = self.evaluate(ts, c_z=None)
+        result = self.evaluate(ts, c_z=None)
+        # Handle both 2-tuple and 3-tuple return values from evaluate
+        if len(result) == 2:
+            x, y = result
+        else:
+            x, y, _ = result
         return {
             'start': np.array([x[0], y[0], 0.0]),
             'left_upper': np.array([x[1], y[1], 0.0]),
@@ -105,14 +137,20 @@ class Figure8Curve:
         p0 = np.array(self.evaluate(t - eps, c_z))
         vel = p1 - p0
         norm = np.linalg.norm(vel, axis=0)
-        return vel / norm
+        # Return normalized tangent vector
+        result = vel / norm
+        # Ensure it's 2D for x,y coordinates (the first two components are the tangent)
+        if result.shape[0] == 3:  # If z is included, we only want x,y
+            return result[:2, :] if result.ndim > 1 else result[:2]
+        return result
 
     def curvature(self, t: Union[float, np.ndarray], c_z: float = 4.0) -> np.ndarray:
         t = np.asarray(t)
         cum = self.info['cum_L'] / self.info['total_L']
         kappa = np.zeros_like(t)
-        masks = [(0 <= t) & (t < cum[1]), (cum[2] <= t) & (t < cum[3]), (cum[4] <= t) & (t <= 1)]
-        for mask in masks:
+        # Arc segments have constant curvature
+        arc_masks = [(0 <= t) & (t < cum[1]), (cum[2] <= t) & (t < cum[3]), (cum[4] <= t) & (t <= 1)]
+        for mask in arc_masks:
             kappa[mask] = 1.0 / self.r
         return kappa
 
@@ -133,7 +171,10 @@ class Figure8Curve:
         numerator = np.sum(rp * cross, axis=0)
         denom = np.sum(np.cross(rp, rpp, axis=0)**2, axis=0) + 1e-12
         tau = numerator / denom
-        return tau[0] if len(t) == 1 else tau
+        # Ensure result is an array, not a scalar
+        if np.isscalar(tau):
+            return np.array([tau])
+        return tau
 
     def frenet_frame(self, t: Union[float, np.ndarray], c_z: float = 4.0):
         T = self.tangent(t, c_z)
@@ -144,8 +185,10 @@ class Figure8Curve:
         valid = kappa > 1e-8
         N[:, valid] = dT[:, valid] / kappa[valid]
         B = np.cross(T.T, N.T).T
+        # Handle the case when input is scalar, make sure it returns scalar components
         if np.asarray(t).ndim == 0:
-            return T[:,0], N[:,0], B[:,0]
+            # T should be shaped like (2,) when t is scalar, not (2,1)
+            return T, N, B
         return T, N, B
 
 
@@ -177,6 +220,40 @@ class C2ClothoidFigure8(Figure8Curve):
         if best_error > 0.1:
             print(f"Warning: C2 junction error still high ({best_error:.4f})")
 
+    def _eval_left_inner_arm(self, s: np.ndarray, info: Dict) -> Tuple[np.ndarray, np.ndarray]:
+        """Evaluate left inner arm with cubic Hermite interpolation"""
+        x0, y0 = -self.a, info['yj']
+        x1, y1 = self.a, -info['yj']
+        dx0, dy0 = 1.0, 0.0
+        dx1, dy1 = -1.0, 0.0
+        
+        L = info['cum_L'][2] - info['cum_L'][1]
+        h00 = 2*s**3 - 3*s**2 + 1
+        h10 = s**3 - 2*s**2 + s
+        h01 = -2*s**3 + 3*s**2
+        h11 = s**3 - s**2
+
+        x = h00 * x0 + h10 * L * dx0 + h01 * x1 + h11 * L * dx1
+        y = h00 * y0 + h10 * L * dy0 + h01 * y1 + h11 * L * dy1
+        return x, y
+
+    def _eval_right_inner_arm(self, s: np.ndarray, info: Dict) -> Tuple[np.ndarray, np.ndarray]:
+        """Evaluate right inner arm with cubic Hermite interpolation"""
+        x0, y0 = self.a, -info['yj']
+        x1, y1 = -self.a, info['yj']
+        dx0, dy0 = -1.0, 0.0
+        dx1, dy1 = 1.0, 0.0
+        
+        L = info['cum_L'][4] - info['cum_L'][3]
+        h00 = 2*s**3 - 3*s**2 + 1
+        h10 = s**3 - 2*s**2 + s
+        h01 = -2*s**3 + 3*s**2
+        h11 = s**3 - s**2
+
+        x = h00 * x0 + h10 * L * dx0 + h01 * x1 + h11 * L * dx1
+        y = h00 * y0 + h10 * L * dy0 + h01 * y1 + h11 * L * dy1
+        return x, y
+
     def evaluate(self, t: Union[float, np.ndarray], c_z: Optional[float] = 4.0) -> Tuple:
         t = np.asarray(t)
         info = self.info
@@ -191,44 +268,23 @@ class C2ClothoidFigure8(Figure8Curve):
         seg = np.searchsorted(cum, s_global, side='right') - 1
         seg = np.clip(seg, 0, 4)
 
-        for i in range(5):
+        # Process each segment type with dedicated evaluation methods
+        segment_functions = [
+            self._eval_left_upper_arc,
+            self._eval_left_inner_arm,  # Special C2 treatment
+            self._eval_right_arc,
+            self._eval_right_inner_arm,  # Special C2 treatment
+            self._eval_left_lower_arc
+        ]
+        
+        for i, func in enumerate(segment_functions):
             mask = (seg == i)
-            if not np.any(mask): continue
+            if not np.any(mask): 
+                continue
             s = (s_global[mask] - cum[i]) / (cum[i+1] - cum[i])
-
-            if i in (0, 2, 4):  # Circular arcs — same as C¹
-                if i == 0:
-                    theta = np.pi - (np.pi - info['theta_lu']) * s
-                    x[mask] = -info['c'] + self.r * np.cos(theta)
-                    y[mask] = self.r * np.sin(theta)
-                elif i == 2:
-                    theta = info['theta_rl'] + (info['theta_ru'] - info['theta_rl']) * s
-                    x[mask] = info['c'] + self.r * np.cos(theta)
-                    y[mask] = self.r * np.sin(theta)
-                else:
-                    theta = info['theta_ll'] - (info['theta_ll'] + np.pi) * s
-                    x[mask] = -info['c'] + self.r * np.cos(theta)
-                    y[mask] = self.r * np.sin(theta)
-            else:  # Inner arms — cubic Hermite with correct signed direction
-                if i == 1:  # Left inner arm
-                    x0, y0 = -self.a, info['yj']
-                    x1, y1 = self.a, -info['yj']
-                    dx0, dy0 = 1.0, 0.0
-                    dx1, dy1 = -1.0, 0.0
-                else:  # Right inner arm
-                    x0, y0 = self.a, -info['yj']
-                    x1, y1 = -self.a, info['yj']
-                    dx0, dy0 = -1.0, 0.0
-                    dx1, dy1 = 1.0, 0.0
-
-                L = cum[i+1] - cum[i]
-                h00 = 2*s**3 - 3*s**2 + 1
-                h10 = s**3 - 2*s**2 + s
-                h01 = -2*s**3 + 3*s**2
-                h11 = s**3 - s**2
-
-                x[mask] = h00 * x0 + h10 * L * dx0 + h01 * x1 + h11 * L * dx1
-                y[mask] = h00 * y0 + h10 * L * dy0 + h01 * y1 + h11 * L * dy1
+            x_mask, y_mask = func(s, info)
+            x[mask] = x_mask
+            y[mask] = y_mask
 
         if z is None:
             return x, y
@@ -238,6 +294,7 @@ class C2ClothoidFigure8(Figure8Curve):
         t = np.asarray(t)
         cum = self.info['cum_L'] / self.info['total_L']
         kappa = super().curvature(t, c_z)
+        # Override the inner segments with signed smooth curvature ramp
         inner = (cum[1] <= t) & (t <= cum[4])
         s_inner = (t[inner] - cum[1]) / (cum[4] - cum[1])
         sign = -1 if self.sign_flip else 1

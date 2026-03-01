@@ -1,4 +1,4 @@
-from fiber_figure8.core import Figure8Curve, C2ClothoidFigure8
+from core import Figure8Curve, C2ClothoidFigure8
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider, CheckButtons
