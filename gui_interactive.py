@@ -50,18 +50,18 @@ def run_gui(default_a: float = 0.85, default_c: float = 12.0, frenet_spacing: fl
                     T, N, B = c1_curve.frenet_frame(tt, c_val)
                     pos = np.array(c1_curve.evaluate(tt, c_val))
                     scale = 0.25
-                    qT = ax3d.quiver(*pos, *T, length=int(scale), arrow_length_ratio=0.25)
-                    qN = ax3d.quiver(*pos, *N, length=int(scale), arrow_length_ratio=0.25)
-                    qB = ax3d.quiver(*pos, *B, length=int(scale), arrow_length_ratio=0.25)
+                    qT = ax3d.quiver(pos[0], pos[1], pos[2], T[0], T[1], 0, length=int(scale), arrow_length_ratio=0.25)
+                    qN = ax3d.quiver(pos[0], pos[1], pos[2], N[0], N[1], 0, length=int(scale), arrow_length_ratio=0.25)
+                    qB = ax3d.quiver(pos[0], pos[1], pos[2], B[0], B[1], 0, length=int(scale), arrow_length_ratio=0.25)
                     frenet_artists.extend([qT, qN, qB])
             if show_c2:
                 for tt in ts_frames:
                     T, N, B = c2_curve.frenet_frame(tt, c_val)
                     pos = np.array(c2_curve.evaluate(tt, c_val))
                     scale = 0.25
-                    qT = ax3d.quiver(*pos, *T, color='#ff4444', length=scale, arrow_length_ratio=0.25)
-                    qN = ax3d.quiver(*pos, *N, color='#44ff44', length=scale, arrow_length_ratio=0.25)
-                    qB = ax3d.quiver(*pos, *B, color='#4444ff', length=scale, arrow_length_ratio=0.25)
+                    qT = ax3d.quiver(pos[0], pos[1], pos[2], T[0], T[1], 0, color='#ff4444', length=int(scale), arrow_length_ratio=0.25)
+                    qN = ax3d.quiver(pos[0], pos[1], pos[2], N[0], N[1], 0, color='#44ff44', length=int(scale), arrow_length_ratio=0.25)
+                    qB = ax3d.quiver(pos[0], pos[1], pos[2], B[0], B[1], 0, color='#4444ff', length=int(scale), arrow_length_ratio=0.25)
                     frenet_artists.extend([qT, qN, qB])
 
         # Equal axes
